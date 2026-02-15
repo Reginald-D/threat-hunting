@@ -27,37 +27,35 @@ Management suspects that some employees may be using TOR browsers to bypass netw
 
 ### 1. Searched the `DeviceFileEvents` Table
 
-Searched for any file that had the string "tor" in it and discovered what looks like the user "employee" downloaded a TOR installer, did something that resulted in many TOR-related files being copied to the desktop, and the creation of a file called `tor-shopping-list.txt` on the desktop at `2024-11-08T22:27:19.7259964Z`. These events began at `2024-11-08T22:14:48.6065231Z`.
+DeviceFileEvents query results confirm Tor Browser installation completed on February 7, 2026 at 8:40:03 PM on endpoint win-11-2026. The creation of installation artifacts, including the license file tor.txt at C:\Users\admin2040\Desktop\Tor Browser\Browser\TorBrowser\Docs\Licenses, validates successful extraction and deployment to the user's Desktop directory.
+
+
 
 **Query used to locate events:**
 
 ```kql
-DeviceFileEvents  
-| where DeviceName == "threat-hunt-lab"  
-| where InitiatingProcessAccountName == "employee"  
-| where FileName contains "tor"  
-| where Timestamp >= datetime(2024-11-08T22:14:48.6065231Z)  
-| order by Timestamp desc  
-| project Timestamp, DeviceName, ActionType, FileName, FolderPath, SHA256, Account = InitiatingProcessAccountName
+DeviceFileEvents
+| where DeviceName contains "win-11-2026"
+| where FileName contains "tor"
+| project Timestamp, DeviceName, ActionType, FileName, FolderPath
 ```
-<img width="1212" alt="image" src="https://github.com/user-attachments/assets/71402e84-8767-44f8-908c-1805be31122d">
-
+<img width="1494" height="133" alt="image" src="https://github.com/user-attachments/assets/34221d46-428c-409f-8f9b-7e84857a650b" />
 ---
 
 ### 2. Searched the `DeviceProcessEvents` Table
 
-Searched for any `ProcessCommandLine` that contained the string "tor-browser-windows-x86_64-portable-14.0.1.exe". Based on the logs returned, at `2024-11-08T22:16:47.4484567Z`, an employee on the "threat-hunt-lab" device ran the file `tor-browser-windows-x86_64-portable-14.0.1.exe` from their Downloads folder, using a command that triggered a silent installation.
+Analysis of DeviceProcessEvents logs confirms that on February 7, 2026 at 8:39:40 PM, user admin2040 executed the Tor Browser installer from the Downloads folder. The process was launched with the /S flag, which triggers silent installation mode—automatically completing the installation without user prompts or visual confirmation dialogs.
 
 **Query used to locate event:**
 
 ```kql
-
-DeviceProcessEvents  
-| where DeviceName == "threat-hunt-lab"  
-| where ProcessCommandLine contains "tor-browser-windows-x86_64-portable-14.0.1.exe"  
-| project Timestamp, DeviceName, AccountName, ActionType, FileName, FolderPath, SHA256, ProcessCommandLine
+DeviceProcessEvents
+| where DeviceName == "win-11-2026"
+| where ProcessCommandLine contains "tor-browser-windows-x86_64-portable-15.0.5.exe  /S"
+| project Timestamp, DeviceName, ActionType, FileName, FolderPath, SHA256, InitiatingProcessAccountName, ProcessCommandLine
 ```
-<img width="1212" alt="image" src="https://github.com/user-attachments/assets/b07ac4b4-9cb3-4834-8fac-9f5f29709d78">
+<img width="703" height="267" alt="image" src="https://github.com/user-attachments/assets/e8242f22-cf0b-42fb-9bb7-c7b24396affb" />
+
 
 ---
 
@@ -68,13 +66,13 @@ Searched for any indication that user "employee" actually opened the TOR browser
 **Query used to locate events:**
 
 ```kql
-DeviceProcessEvents  
-| where DeviceName == "threat-hunt-lab"  
-| where FileName has_any ("tor.exe", "firefox.exe", "tor-browser.exe")  
-| project Timestamp, DeviceName, AccountName, ActionType, FileName, FolderPath, SHA256, ProcessCommandLine  
-| order by Timestamp desc
+// TOR Browser or service was launched
+DeviceProcessEvents
+| where DeviceName == "win-11-2026"
+| where ProcessCommandLine has_any ("tor.exe","firefox.exe", "tor-browser.exe")
+| project  Timestamp, DeviceName, AccountName, ActionType, ProcessCommandLine, SHA256
 ```
-<img width="1212" alt="image" src="https://github.com/user-attachments/assets/b13707ae-8c2d-4081-a381-2b521d3a0d8f">
+<img width="845" height="196" alt="image" src="https://github.com/user-attachments/assets/2295611e-519b-4a8a-805c-1cbc705b12fb" />
 
 ---
 
@@ -85,75 +83,130 @@ Searched for any indication the TOR browser was used to establish a connection u
 **Query used to locate events:**
 
 ```kql
-DeviceNetworkEvents  
-| where DeviceName == "threat-hunt-lab"  
-| where InitiatingProcessAccountName != "system"  
-| where InitiatingProcessFileName in ("tor.exe", "firefox.exe")  
-| where RemotePort in ("9001", "9030", "9040", "9050", "9051", "9150", "80", "443")  
-| project Timestamp, DeviceName, InitiatingProcessAccountName, ActionType, RemoteIP, RemotePort, RemoteUrl, InitiatingProcessFileName, InitiatingProcessFolderPath  
+// TOR Browser or service is being used and is actively creating network connections
+DeviceNetworkEvents
+| where InitiatingProcessFileName in~ ("tor.exe", "firefox.exe")
+| where RemotePort in (9001, 9030, 9040, 9050, 9051, 9150)
+| where DeviceName == "win-11-2026"
+| project Timestamp, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName, RemoteIP, RemotePort, RemoteUrl
 | order by Timestamp desc
 ```
-<img width="1212" alt="image" src="https://github.com/user-attachments/assets/87a02b5b-7d12-4f53-9255-f5e750d0e3cb">
+<img width="1391" height="309" alt="image" src="https://github.com/user-attachments/assets/0ad3d062-0f5e-4a6f-a96f-1d86151a022a" />
 
 ---
 
-## Chronological Event Timeline 
+# Chronological Event Timeline 
 
-### 1. File Download - TOR Installer
 
-- **Timestamp:** `2024-11-08T22:14:48.6065231Z`
-- **Event:** The user "employee" downloaded a file named `tor-browser-windows-x86_64-portable-14.0.1.exe` to the Downloads folder.
-- **Action:** File download detected.
-- **File Path:** `C:\Users\employee\Downloads\tor-browser-windows-x86_64-portable-14.0.1.exe`
+# Phase 1: Preparation & Execution
+### 8:38:40 PM - Command Prompt Launched
 
-### 2. Process Execution - TOR Browser Installation
+- **Event Type:** ProcessCreated
+- **Action:** User opened `cmd.exe` (Command Prompt)
+- **Parent Process:** `explorer.exe`
+- **Significance:** Command-line environment prepared for silent installation
+  
+### 8:39:40 PM - Tor Browser Installer Executed
+- **Event Type:** ProcessCreated
+- **KQL Query:** DeviceProcessEvents (installation detection)
+- **Action:** admin2040 executed `tor-browser-windows-x86_64-portable-15.0.5.exe /S`
+- **Location:** `C:\Users\admin2040\Downloads\`
+- **Method:** Silent installation mode (/S flag)
+- **File Hash (SHA256):** 15448e951583b624c3f8fdfa8bc55fa9b65e1bcafd474f3f2dfd5444e4178846
+- **Significance:** Installation began without user prompts or GUI windows
 
-- **Timestamp:** `2024-11-08T22:16:47.4484567Z`
-- **Event:** The user "employee" executed the file `tor-browser-windows-x86_64-portable-14.0.1.exe` in silent mode, initiating a background installation of the TOR Browser.
-- **Action:** Process creation detected.
-- **Command:** `tor-browser-windows-x86_64-portable-14.0.1.exe /S`
-- **File Path:** `C:\Users\employee\Downloads\tor-browser-windows-x86_64-portable-14.0.1.exe`
+# Phase 2: Installation Completion
+### 8:40:03 PM - Installation Files Extracted
+- **Event Type:** FileCreated
+- **KQL Query:** DeviceFileEvents (file creation detection)
+- **Action:** Tor Browser files extracted to Desktop
+- **File Created:** tor.txt (license file)
+- **Full Path:** `C:\Users\admin2040\Desktop\Tor Browser\Browser\TorBrowser\Docs\Licenses\tor.txt`
+- **Significance:** Installation successfully completed (23 seconds from execution to completion)
 
-### 3. Process Execution - TOR Browser Launch
+# Phase 3: Service Initialization
+### 8:40:48 PM - Tor Anonymization Service Started
+- **Event Type:** ProcessCreated
+- **KQL Query:** DeviceProcessEvents (Tor service detection)
+- **Action:** `tor.exe` launched with full configuration
+- **Key Configuration:**
+  - **SOCKS Proxy:** `localhost:9150` (for Firefox)
+  - **Control Port:** `localhost:9151` (for Tor management)
+  - **Data Directory:** `C:\Users\admin2040\Desktop\Tor Browser\`
+  - **Password Protected:** Yes (hashed password configured)
+- **Significance:** Tor network service became fully operational (45 seconds after installation, 68 seconds from initial execution)
 
-- **Timestamp:** `2024-11-08T22:17:21.6357935Z`
-- **Event:** User "employee" opened the TOR browser. Subsequent processes associated with TOR browser, such as `firefox.exe` and `tor.exe`, were also created, indicating that the browser launched successfully.
-- **Action:** Process creation of TOR browser-related executables detected.
-- **File Path:** `C:\Users\employee\Desktop\Tor Browser\Browser\TorBrowser\Tor\tor.exe`
 
-### 4. Network Connection - TOR Network
+# Phase 4: Anonymous Browsing Activated
+### 8:41:18 PM - First Browser Connection to Tor
+- **Event Type:** NetworkConnectionEstablished
+- **KQL Query:** DeviceNetworkEvents (network activity detection)
+- **Action:** `firefox.exe` → `localhost:9150` (local SOCKS proxy)
+ - **Protocol:** `SOCKS5` proxy connection
+ - **Significance:** User initiated browsing session; Firefox connected to local Tor service
+### 8:41:39 PM - Tor Circuit Building Begins
+- **Event Type:** NetworkConnectionEstablished
+- **Action:** `tor.exe` → `94.16.115.121:9001` (Tor relay node #1)
+- **Relay Hostname:** `zl35v3.com`
+- **Significance:** First hop in anonymous circuit established
+### 8:41:40 PM - Additional Relay Connection
+- **Event Type:** NetworkConnectionEstablished
+- **Action:** tor.exe → 94.16.115.121:9001 (confirmation)
+- **Relay URL:** https://www.zl35v3.com
+### 8:41:42 PM - Second Relay Node Contacted
+- **Event Type:** NetworkConnectionEstablished
+- **Action:** tor.exe → 205.185.121.177:9001 (Tor relay node #2)
+- **Significance:** Multi-hop circuit being constructed
+### 8:41:44 PM - Third Relay Node Contacted (Multiple Connections)
+- **Event Type:** NetworkConnectionEstablished (3 simultaneous connections)
+- **Actions:**
+  - tor.exe → `87.106.134.107:9001` (Tor relay node #3)
+  - tor.exe → `87.106.134.107:9001` (relay: zw6w4hj5plv6ui3hnqeqjow.com)
+  - tor.exe → `205.185.121.177:9001` (relay: fivgqmsmahhbsah6wha4oi.com)
+- **Significance:** Complete Tor circuit established through 3 relay nodes
+### 8:42:00 PM - Active Anonymous Browsing Session Confirmed
+- **Event Type:** NetworkConnectionEstablished
+- **Action:** `firefox.exe` → `localhost:9150` (SOCKS proxy)
+- **Significance:** User actively browsing through fully established Tor network; all traffic now encrypted and anonymized
 
-- **Timestamp:** `2024-11-08T22:18:01.1246358Z`
-- **Event:** A network connection to IP `176.198.159.33` on port `9001` by user "employee" was established using `tor.exe`, confirming TOR browser network activity.
-- **Action:** Connection success.
-- **Process:** `tor.exe`
-- **File Path:** `c:\users\employee\desktop\tor browser\browser\torbrowser\tor\tor.exe`
+# Total Time to Full Operational Capability
+### From execution to anonymous browsing: 3 minutes, 20 seconds
+### Key Milestones:
+- Installation: 23 seconds
+- Service initialization: 68 seconds
+- Network anonymization: 3 minutes 20 seconds
 
-### 5. Additional Network Connections - TOR Browser Activity
+# Evidence Sources
+### All events documented using the following KQL queries:
+- **DeviceFileEvents** - Installation file creation detection
+- **DeviceProcessEvents** - Installer execution and Tor service launch
+- **DeviceNetworkEvents** - Tor network connections and browsing activity
+- **Data Completeness:** Full kill chain documented from initial execution through active anonymous browsing
 
-- **Timestamps:**
-  - `2024-11-08T22:18:08Z` - Connected to `194.164.169.85` on port `443`.
-  - `2024-11-08T22:18:16Z` - Local connection to `127.0.0.1` on port `9150`.
-- **Event:** Additional TOR network connections were established, indicating ongoing activity by user "employee" through the TOR browser.
-- **Action:** Multiple successful connections detected.
+- This timeline can be inserted into your "Evidence" section to show the complete progression of events in a clear, chronological format.
 
-### 6. File Creation - TOR Shopping List
-
-- **Timestamp:** `2024-11-08T22:27:19.7259964Z`
-- **Event:** The user "employee" created a file named `tor-shopping-list.txt` on the desktop, potentially indicating a list or notes related to their TOR browser activities.
-- **Action:** File creation detected.
-- **File Path:** `C:\Users\employee\Desktop\tor-shopping-list.txt`
 
 ---
 
-## Summary
+# Summary
+- On February 7, 2026, user `admin2040` installed and activated Tor Browser on device `win-11-2026`, achieving full anonymous browsing capability within 3 minutes and 20 seconds. The rapid, deliberate installation method and immediate operational use indicate prior familiarity with anonymization tools.
+### Key Indicators of Deliberate Action:
+- Silent installation mode (/S flag) used to bypass user prompts
+- Remote access via RDP `IP: 10.0.8.8` with elevated administrator privileges
+- Unusually fast deployment timeline suggests planned activity
+- Immediate use upon installation completion
+- Security Impact: Beginning at 8:42:00 PM, all network traffic from `admin2040` became completely anonymized and invisible to corporate security controls. Monitoring systems cannot detect websites visited, data exfiltration attempts, malicious downloads, dark web access, or inspect any encrypted Tor traffic.
+- Recommendation: Immediate interview with `admin2040` required to determine authorization and intent. Forensic analysis of the endpoint recommended to identify scope of anonymous browsing activity and assess potential policy violations or data loss.
 
-The user "employee" on the "threat-hunt-lab" device initiated and completed the installation of the TOR browser. They proceeded to launch the browser, establish connections within the TOR network, and created various files related to TOR on their desktop, including a file named `tor-shopping-list.txt`. This sequence of activities indicates that the user actively installed, configured, and used the TOR browser, likely for anonymous browsing purposes, with possible documentation in the form of the "shopping list" file.
 
 ---
 
-## Response Taken
+# Recommended Response Actions
+- ***Immediate (0-24 Hours):*** Interview `admin2040` to determine if the Tor installation was authorized for legitimate security research or represents a policy violation. Preserve evidence by collecting browser artifacts, file access logs, and network traffic data before taking any containment actions. Verify the account is legitimate and review recent activity for data exfiltration indicators (large file transfers, USB usage, cloud uploads).
+  
+- ***Short-Term (1-7 Days):*** If unauthorized, remove Tor Browser, reset credentials, and revoke unnecessary admin privileges. Deploy EDR detection rules to alert on future Tor installations, silent installer executions, and connections to ports `9001` `9050` `9150`. Monitor `admin2040's` activity for 30 days with enhanced logging.
+  
+- ***Long-Term (Strategic):*** Implement application allowlisting to prevent unauthorized software installations, deploy Privileged Access Management (PAM) for admin account control, and block Tor exit nodes at the firewall. Conduct security awareness training on anonymization tool risks and acceptable use policies. The investigation outcome should drive the response—proportionate action for authorized research, swift containment for policy violations.
 
-TOR usage was confirmed on the endpoint `threat-hunt-lab` by the user `employee`. The device was isolated, and the user's direct manager was notified.
 
 ---
